@@ -57,15 +57,26 @@ Requires only Docker on the build host. Everything else (ROS1 Noetic via
 RoboStack, Ceres, OpenCV, the VINS-Fusion build) happens inside the image.
 
 ```bash
-./build_vins_adapter.sh                     # -> vins_adapter/, vins_adapter.tar.gz
-./build_vins_adapter.sh --remote user@host  # build on a native amd64 docker daemon over ssh
+./build_vins_adapter.sh                     # -> vins_adapter/, vins_adapter-linux-<arch>.tar.gz
+./build_vins_adapter.sh --remote user@host  # build on a native docker daemon over ssh
 ./build_vins_adapter.sh --force             # ignore the docker layer cache
 ./build_vins_adapter.sh --check             # verify an already-copied adapter
 ./build_vins_adapter.sh --help              # all options
 ```
 
-On Apple Silicon, `--remote <linux-host>` is strongly recommended: the amd64
-emulation path is roughly 10-30x slower and memory hungry.
+The build target follows the cpu arch of the machine that compiles, so the
+ELF runs natively there instead of under qemu emulation:
+
+- x86_64 host → `linux/amd64`
+- arm64/aarch64 host → `linux/arm64` (Apple Silicon included — a Rosetta shell
+  that reports `x86_64` is still detected as `arm64`)
+- `--remote <host>` → the remote docker daemon's arch (queried via
+  `docker version`)
+
+Pass `--platform linux/<arch>` to cross-build explicitly (e.g. amd64 on an
+arm64 mac). On Apple Silicon, `--remote <linux-host>` is strongly recommended
+over cross-building amd64 locally: the emulation path is 10-30x slower and
+memory hungry.
 
 The build always runs the regression suite at the end; `--skip-tests` opts out.
 
@@ -73,13 +84,17 @@ The build always runs the regression suite at the end; `--skip-tests` opts out.
 
 | path | what |
 | --- | --- |
-| `vins_adapter/vins_adapter` | the Linux x86_64 ELF binary |
+| `vins_adapter/vins_adapter` | the Linux ELF binary (`x86_64` or `aarch64`) |
 | `vins_adapter/lib/` | bundled shared-library closure (resolved via `$ORIGIN/lib`) |
 | `vins_adapter/run_vins_adapter.sh` | launcher — use this |
-| `vins_adapter/BUILDINFO.json` | provenance: source commit, image id, platform, build time |
-| `vins_adapter.tar.gz` (+ `.md5`) | self-contained bundle for shipping to workers |
+| `vins_adapter/BUILDINFO.json` | provenance: source commit, image id, platform, arch, build time |
+| `vins_adapter-linux-x86_64.tar.gz` (+ `.md5`) | amd64 bundle for shipping to workers |
+| `vins_adapter-linux-aarch64.tar.gz` (+ `.md5`) | arm64 bundle for shipping to workers |
 
-Verify a transferred bundle with `md5sum -c vins_adapter.tar.gz.md5`.
+The arch is recorded in the tarball file name, its `.md5` file name/content,
+and in `BUILDINFO.json` inside, so x86_64 and aarch64 bundles can coexist and
+be told apart without unpacking. Verify a transferred bundle with
+`md5sum -c vins_adapter-linux-x86_64.tar.gz.md5` (or the aarch64 name).
 
 ---
 
@@ -89,9 +104,10 @@ Verify a transferred bundle with `md5sum -c vins_adapter.tar.gz.md5`.
 ./vins_adapter/run_vins_adapter.sh config.yaml trajectory.tum
 ```
 
-Unpacked anywhere on a Linux x86_64 host; it needs nothing but glibc. It is a
-Linux ELF — do not run it on macOS directly (run it inside the built image
-instead).
+Unpacked anywhere on a Linux host of the same arch it was built for
+(x86_64 for the amd64 bundle, aarch64 for the arm64 bundle); it needs nothing
+but glibc. It is a Linux ELF — do not run it on macOS directly (run it inside
+the built image instead).
 
 ### Config yaml
 
