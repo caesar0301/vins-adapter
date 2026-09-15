@@ -1,0 +1,5 @@
+# Keep the docker build context small: the local VINS-Fusion checkout's
+# history and previous build outputs are not needed in the image.
+VINS-Fusion/.git
+vins_adapter/
+BUILDINFO.json
